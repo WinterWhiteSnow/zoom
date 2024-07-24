@@ -5,7 +5,8 @@ import { fileURLToPath } from "url";
 import { WebSocketServer } from "ws";
 import http from 'http';
 
-import SocketIO from "socket.io"
+// import SocketIO from "socket.io"
+import { Server } from "socket.io";
 // const SocketIO = require("socket.io");
 
 
@@ -25,7 +26,32 @@ const handleListen = () => console.log("listening on http://localhost:3000");
 // app.listen(3000,handleListen); // 포트 번호인듯?
 
 const HttpServer = http.createServer(app); // http서버
-const wsServer = SocketIO(HttpServer);
+const wsServer = new Server(HttpServer);
+
+wsServer.on("connection", (socket) => {
+    socket["nickname"] = "none";
+    socket.onAny((event) => { // 현재 무슨 이벤트를 진행시켰는지 확인함
+        console.log(`Socket Event:${event}`)
+    })
+    console.log(socket.id)
+    socket.on("enter_room", (roomName, done) => {
+        socket.join(roomName.payload)
+        done();
+        socket.to(roomName.payload).emit("welcome", socket.nickname); // 전체메세지
+    })
+    socket.on("disconnecting", () => {
+        socket.rooms.forEach(room => socket.to(room).emit("bye", socket.nickname))
+    })
+    socket.on("new_message", (msg, roomName, done) => {
+        socket.to(roomName).emit("new_message", `${socket.nickname} : ${msg}`)
+        done();
+    })
+
+    socket.on("nickname", nickname => socket["nickname"] = nickname)
+    
+})
+
+HttpServer.listen(3000, handleListen);
 
 
 
@@ -67,8 +93,6 @@ const wsServer = SocketIO(HttpServer);
 // });
 
 
-
-wsServer.listen(3000, handleListen);
 
 // 현재까지의 구조는 http서버를 먼저 구축한 뒤
 // http서버 바로 위에 웹소켓 서버를 구축시킨 거임
